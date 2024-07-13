@@ -2,6 +2,8 @@ import json
 import time
 import logging
 import random
+
+import requests
 from web3 import Web3
 from web3.middleware import geth_poa_middleware
 from dotenv import load_dotenv
@@ -11,6 +13,7 @@ import anthropic
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
+import httpx
 
 load_dotenv()
 
@@ -311,6 +314,40 @@ def leaderboard():
         for idx, model in enumerate(models)
     ]
     return jsonify(leaderboard)
+
+
+@app.route('/verify', methods=['POST'])
+def verify():
+    req_body = request.json
+    print("Received request to verify credential:\n", req_body)
+
+    payload = {
+        "nullifier_hash": req_body["nullifier_hash"],
+        "merkle_root": req_body["merkle_root"],
+        "proof": req_body["proof"],
+        "verification_level": req_body["verification_level"],
+        "action": req_body["action"],
+        "signal": req_body["signal"],
+    }
+
+    print("Sending request to World ID /verify endpoint:\n", payload)
+
+    verify_endpoint = f"{os.getenv('NEXT_PUBLIC_WLD_API_BASE_URL')}/api/v1/verify/{os.getenv('NEXT_PUBLIC_WLD_APP_ID')}"
+
+    verify_res = requests.post(verify_endpoint, json=payload)
+    wld_response = verify_res.json()
+
+    print(f"Received {verify_res.status_code} response from World ID /verify endpoint:\n", wld_response)
+
+    if verify_res.status_code == 200:
+        # This is where you should perform backend actions based on the verified credential, such as setting a user as "verified" in a database
+        # For this example, we'll just return a 200 response and console.log the verified credential
+        print("Credential verified! This user's nullifier hash is: ", wld_response["nullifier_hash"])
+        return jsonify({"code": "success", "detail": "This action verified correctly!"})
+    else:
+        # This is where you should handle errors from the World ID /verify endpoint. Usually these errors are due to an invalid credential or a credential that has already been used.
+        # For this example, we'll just return the error code and detail from the World ID /verify endpoint.
+        return jsonify({"code": wld_response["code"], "detail": wld_response["detail"]}), verify_res.status_code
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001)
