@@ -319,7 +319,7 @@ def payCritic(wallet_address):
 def criticize_user_request():
     data = request.json
     prompt = data.get('prompt')
-    wallet_address = data.get('wallet_address')
+    wallet_address = os.getenv("USER_WALLET_ADDRESS")
 
     if not prompt:
         return jsonify({'error': 'Prompt is required'}), 400
