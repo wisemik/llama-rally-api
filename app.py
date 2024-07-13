@@ -15,6 +15,8 @@ from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 import httpx
 
+from circle import create_transfer
+
 load_dotenv()
 
 # Clients for different LLM services
@@ -294,10 +296,18 @@ def llm_request_streaming():
     logger.info(f"Received message for LLM streaming: {message}, model: {model}")
     return Response(handle_llm_stream_request(message, model), content_type='text/event-stream')
 
+def payUser(wallet_address):
+    # Placeholder function to pay the user
+    logger.info(f"Paying user with wallet address: {wallet_address}")
+    create_transfer("0.1", wallet_address)
+    pass
+
 @app.route('/criticize_user_request', methods=['POST'])
 def criticize_user_request():
     data = request.json
     prompt = data.get('prompt')
+    wallet_address = data.get('wallet_address')
+
     if not prompt:
         return jsonify({'error': 'Prompt is required'}), 400
 
@@ -328,6 +338,9 @@ def criticize_user_request():
     except (ValueError, KeyError) as e:
         logger.error(f"Error parsing response: {e}")
         return jsonify({'error': 'Failed to parse contract response'}), 500
+
+    if wallet_address and score >= 7:
+        payUser(wallet_address)
 
     return jsonify({
         'score': score,
