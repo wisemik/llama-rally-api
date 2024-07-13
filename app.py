@@ -243,7 +243,7 @@ def criticize_user_request():
     logger.info(f"Transaction sent, tx hash: {tx_hash.hex()}")
     receipt = wait_for_transaction_receipt(tx_hash)
     logger.info(f"Transaction receipt: {receipt}")
-    time.sleep(10)
+    time.sleep(5)
 
     response = get_contract_response()
     logger.info(f"Contract response: {response}")

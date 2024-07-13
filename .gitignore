@@ -2,3 +2,5 @@
 .env
 .idea/
 instance/*
+__pycache__/
+entity_secret.py
