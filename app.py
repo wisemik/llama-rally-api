@@ -193,5 +193,46 @@ def llm_request_streaming():
     logger.info(f"Received message for LLM streaming: {message}, model: {model}")
     return Response(handle_llm_stream_request(message, model), content_type='text/event-stream')
 
+@app.route('/criticize_user_request', methods=['POST'])
+def criticize_user_request():
+    data = request.json
+    prompt = data.get('prompt')
+    if not prompt:
+        return jsonify({'error': 'Prompt is required'}), 400
+
+    logger.info(f"Received message: {prompt}")
+
+    message = ("You are to receive a user message that is a prompt."
+               "Your task is to evaluate this prompt,"
+               "determine if it is good or bad, and assign it a score out of 10."
+               "Additionally, provide a description explaining your score."
+               "Your final output should be in JSON format with two fields: score and description."
+               "\n\nPlease provide your evaluation in the following JSON format (and ONLY in this format):\n\n{\"score\": <score out of 10>,"
+               "\"description\": \"<explanation of the score>\"}"
+               f"\n\nHere is the user's prompt for you to evaluate:\n\n{prompt}")
+
+    tx_hash = send_message_to_contract(message)
+    logger.info(f"Transaction sent, tx hash: {tx_hash.hex()}")
+    receipt = wait_for_transaction_receipt(tx_hash)
+    logger.info(f"Transaction receipt: {receipt}")
+    time.sleep(10)
+
+    response = get_contract_response()
+    logger.info(f"Contract response: {response}")
+
+    try:
+        response_data = json.loads(response)
+        score = response_data.get('score')
+        description = response_data.get('description')
+    except (ValueError, KeyError) as e:
+        logger.error(f"Error parsing response: {e}")
+        return jsonify({'error': 'Failed to parse contract response'}), 500
+
+    return jsonify({
+        'score': score,
+        'description': description
+    })
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001)
