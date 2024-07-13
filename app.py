@@ -24,9 +24,9 @@ clientOpenai = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 # Web3 setup
 RPC_URL = os.getenv('RPC_URL')
 PRIVATE_KEY = os.getenv('PRIVATE_KEY')
-CONTRACT_ADDRESS = os.getenv('SIMPLE_LLM_CONTRACT_ADDRESS')
+CONTRACT_CRITIC_ADDRESS = os.getenv('CONTRACT_CRITIC_ADDRESS')
 
-if not RPC_URL or not PRIVATE_KEY or not CONTRACT_ADDRESS:
+if not RPC_URL or not PRIVATE_KEY or not CONTRACT_CRITIC_ADDRESS:
     raise ValueError("Missing required environment variables")
 
 web3 = Web3(Web3.HTTPProvider(RPC_URL))
@@ -36,7 +36,6 @@ if not web3.is_connected():
 
 with open('abis/OpenAiSimpleLLM.json', 'r') as file:
     contract_abi = json.load(file)
-contract = web3.eth.contract(address=CONTRACT_ADDRESS, abi=contract_abi)
 account = web3.eth.account.from_key(PRIVATE_KEY)
 
 # Flask app setup
@@ -54,7 +53,14 @@ class ModelScore(db.Model):
     score = db.Column(db.Float, default=1200)
     price = db.Column(db.Float, nullable=False)
 
-# Initialize models from JSON if not already initialized
+class AgentScore(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), unique=True, nullable=False)
+    score = db.Column(db.Float, default=1200)
+    price = db.Column(db.Float, nullable=False)
+    address = db.Column(db.String(50), nullable=False)
+
+# Initialize models and agents from JSON if not already initialized
 def initialize_models():
     if not ModelScore.query.first():
         with open('models_data.json', 'r') as file:
@@ -64,9 +70,19 @@ def initialize_models():
                 db.session.add(new_model)
             db.session.commit()
 
+def initialize_agents():
+    if not AgentScore.query.first():
+        with open('agents_data.json', 'r') as file:
+            agents_data = json.load(file)
+            for agent in agents_data:
+                new_agent = AgentScore(name=agent['name'], price=agent['price'], address=agent['address'])
+                db.session.add(new_agent)
+            db.session.commit()
+
 with app.app_context():
     db.create_all()
     initialize_models()
+    initialize_agents()
 
 # Logging setup
 logging.basicConfig(level=logging.INFO)
@@ -78,10 +94,20 @@ def get_all_models():
         models_data = json.load(file)
     return [model['name'] for model in models_data]
 
+# Helper function to get all agent names from JSON
+def get_all_agents():
+    with open('agents_data.json', 'r') as file:
+        agents_data = json.load(file)
+    return [agent['name'] for agent in agents_data]
+
 ALL_MODELS = get_all_models()
+ALL_AGENTS = get_all_agents()
 
 # Helper functions
-def send_message_to_contract(message):
+
+def send_message_to_contract(message, contract_address):
+    contract = web3.eth.contract(address=contract_address, abi=contract_abi)
+
     nonce = web3.eth.get_transaction_count(account.address)
     txn = contract.functions.sendMessage(message).build_transaction({
         'chainId': 696969,
@@ -93,10 +119,12 @@ def send_message_to_contract(message):
     tx_hash = web3.eth.send_raw_transaction(signed_txn.rawTransaction)
     return tx_hash
 
+
 def wait_for_transaction_receipt(tx_hash):
     return web3.eth.wait_for_transaction_receipt(tx_hash)
 
-def get_contract_response():
+def get_contract_response(contract_address):
+    contract = web3.eth.contract(address=contract_address, abi=contract_abi)
     while True:
         response = contract.functions.response().call()
         if response:
@@ -124,6 +152,9 @@ def get_claude_completion(message, model='claude-3-5-sonnet-20240620'):
 def select_random_models():
     return random.sample(ALL_MODELS, 2)
 
+def select_random_agents():
+    return random.sample(ALL_AGENTS, 2)
+
 def handle_llm_request(message, model):
     if 'gpt' in model:
         return get_openai_completion(message, model)
@@ -131,6 +162,25 @@ def handle_llm_request(message, model):
         return get_claude_completion(message, model)
     else:
         return None
+
+def handle_agent_request(message, agent_name):
+    agent = AgentScore.query.filter_by(name=agent_name).first()
+    if not agent:
+        logger.error(f"Agent {agent_name} not found")
+        return None
+
+    contract_address = agent.address
+    tx_hash = send_message_to_contract(message, contract_address)
+    logger.info(f"Transaction sent, tx hash: {tx_hash.hex()}")
+    receipt = wait_for_transaction_receipt(tx_hash)
+    logger.info(f"Transaction receipt: {receipt}")
+    time.sleep(10)
+
+    response = get_contract_response(contract_address)
+    logger.info(f"Contract response: {response}")
+
+    return response
+
 
 def handle_llm_stream_request(message, model):
     logger.info(f"Streaming request received for model: {model}")
@@ -190,6 +240,11 @@ def random_models():
     modelA, modelB = select_random_models()
     return jsonify({'modelA': modelA, 'modelB': modelB})
 
+@app.route('/random_agents', methods=['GET'])
+def random_agents():
+    agentA, agentB = select_random_agents()
+    return jsonify({'agentA': agentA, 'agentB': agentB})
+
 @app.route('/llm_request', methods=['POST'])
 def llm_request():
     data = request.json
@@ -206,6 +261,24 @@ def llm_request():
         return jsonify({'error': 'Failed to get a response from the model'}), 500
 
     logger.info(f"LLM response: {response}")
+    return jsonify({'message': message, 'response': response})
+
+@app.route('/agent_request', methods=['POST'])
+def agent_request():
+    data = request.json
+    message = data.get('message')
+    agent = data.get('agent')
+    if not message:
+        return jsonify({'error': 'Message is required'}), 400
+    if agent not in ALL_AGENTS:
+        return jsonify({'error': f'Invalid agent: {agent}. Available agents are: {ALL_AGENTS}'}), 400
+
+    logger.info(f"Received message for agent completion: {message}, agent: {agent}")
+    response = handle_agent_request(message, agent)
+    if response is None:
+        return jsonify({'error': 'Failed to get a response from the agent'}), 500
+
+    logger.info(f"Agent response: {response}")
     return jsonify({'message': message, 'response': response})
 
 @app.route('/llm_request_streaming', methods=['POST'])
@@ -239,13 +312,13 @@ def criticize_user_request():
                "\"description\": \"<explanation of the score>\"}"
                f"\n\nHere is the user's prompt for you to evaluate:\n\n{prompt}")
 
-    tx_hash = send_message_to_contract(message)
+    tx_hash = send_message_to_contract(message, CONTRACT_CRITIC_ADDRESS)
     logger.info(f"Transaction sent, tx hash: {tx_hash.hex()}")
     receipt = wait_for_transaction_receipt(tx_hash)
     logger.info(f"Transaction receipt: {receipt}")
     time.sleep(5)
 
-    response = get_contract_response()
+    response = get_contract_response(CONTRACT_CRITIC_ADDRESS)
     logger.info(f"Contract response: {response}")
 
     try:
@@ -283,6 +356,28 @@ def vote():
 
     return jsonify({'message': 'Vote recorded and ratings updated'})
 
+@app.route('/vote_agents', methods=['POST'])
+def vote_agents():
+    data = request.json
+    agent_a = data.get('agentA')
+    agent_b = data.get('agentB')
+    result = data.get('result')  # '<agent_name>' or 'draw'
+
+    if not agent_a or not agent_b or (result not in [agent_a, agent_b, 'draw']):
+        return jsonify({'error': 'Invalid input'}), 400
+
+    agent_a_record = AgentScore.query.filter_by(name=agent_a).first()
+    agent_b_record = AgentScore.query.filter_by(name=agent_b).first()
+
+    if not agent_a_record or not agent_b_record:
+        return jsonify({'error': 'Agent not found'}), 404
+
+    update_elo_ratings_agents(agent_a_record, agent_b_record, result)
+
+    db.session.commit()
+
+    return jsonify({'message': 'Vote recorded and ratings updated'})
+
 def update_elo_ratings(model_a, model_b, result):
     K = 32  # ELO constant
 
@@ -300,6 +395,23 @@ def update_elo_ratings(model_a, model_b, result):
     model_a.score = calculate_new_rating(model_a.score, model_b.score, score_a)
     model_b.score = calculate_new_rating(model_b.score, model_a.score, score_b)
 
+def update_elo_ratings_agents(agent_a, agent_b, result):
+    K = 32  # ELO constant
+
+    def calculate_new_rating(rating, opponent_rating, actual_score):
+        expected_score = 1 / (1 + 10 ** ((opponent_rating - rating) / 400))
+        return rating + K * (actual_score - expected_score)
+
+    if result == agent_a.name:
+        score_a, score_b = 1, 0
+    elif result == agent_b.name:
+        score_a, score_b = 0, 1
+    elif result == 'draw':
+        score_a, score_b = 0.5, 0.5
+
+    agent_a.score = calculate_new_rating(agent_a.score, agent_b.score, score_a)
+    agent_b.score = calculate_new_rating(agent_b.score, agent_a.score, score_b)
+
 @app.route('/leaderboard', methods=['GET'])
 def leaderboard():
     models = ModelScore.query.order_by(ModelScore.score.desc()).all()
@@ -309,12 +421,26 @@ def leaderboard():
             'name': model.name,
             'score': model.score,
             'price': model.price,
-            'price_per_score': model.price / model.score if model.score != 0 else 0
+            'price_per_score':  model.score / model.price if model.price != 0 else 0
         }
         for idx, model in enumerate(models)
     ]
     return jsonify(leaderboard)
 
+@app.route('/leaderboard_agents', methods=['GET'])
+def leaderboard_agents():
+    agents = AgentScore.query.order_by(AgentScore.score.desc()).all()
+    leaderboard = [
+        {
+            'rank': idx + 1,
+            'name': agent.name,
+            'score': agent.score,
+            'price': agent.price,
+            'price_per_score': agent.score / agent.price if agent.price != 0 else 0
+        }
+        for idx, agent in enumerate(agents)
+    ]
+    return jsonify(leaderboard)
 
 @app.route('/verify', methods=['POST'])
 def verify():
