@@ -9,7 +9,8 @@ import os
 import openai
 import anthropic
 from flask import Flask, request, jsonify, Response
-from flask_cors import CORS  # Import the CORS module
+from flask_cors import CORS
+from flask_sqlalchemy import SQLAlchemy
 
 load_dotenv()
 
@@ -36,19 +37,45 @@ contract = web3.eth.contract(address=CONTRACT_ADDRESS, abi=contract_abi)
 account = web3.eth.account.from_key(PRIVATE_KEY)
 
 # Flask app setup
-
-
 app = Flask(__name__)
-CORS(app)  # Enable CORS for the app
+CORS(app, resources={r"/*": {"origins": "*"}})
+
+# Database setup
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///models.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
+
+class ModelScore(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), unique=True, nullable=False)
+    score = db.Column(db.Float, default=1200)
+    price = db.Column(db.Float, nullable=False)
+
+# Initialize models from JSON if not already initialized
+def initialize_models():
+    if not ModelScore.query.first():
+        with open('models_data.json', 'r') as file:
+            models_data = json.load(file)
+            for model in models_data:
+                new_model = ModelScore(name=model['name'], price=model['price'])
+                db.session.add(new_model)
+            db.session.commit()
+
+with app.app_context():
+    db.create_all()
+    initialize_models()
 
 # Logging setup
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Model lists
-CHATGPT_MODELS = ['gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo', 'gpt-4o']
-CLAUDE_MODELS = []
-ALL_MODELS = CHATGPT_MODELS + CLAUDE_MODELS
+# Helper function to get all model names from JSON
+def get_all_models():
+    with open('models_data.json', 'r') as file:
+        models_data = json.load(file)
+    return [model['name'] for model in models_data]
+
+ALL_MODELS = get_all_models()
 
 # Helper functions
 def send_message_to_contract(message):
@@ -95,18 +122,17 @@ def select_random_models():
     return random.sample(ALL_MODELS, 2)
 
 def handle_llm_request(message, model):
-    if model in CHATGPT_MODELS:
+    if 'gpt' in model:
         return get_openai_completion(message, model)
-    elif model in CLAUDE_MODELS:
+    elif 'claude' in model:
         return get_claude_completion(message, model)
     else:
         return None
 
-
 def handle_llm_stream_request(message, model):
     logger.info(f"Streaming request received for model: {model}")
     try:
-        if model in CHATGPT_MODELS:
+        if 'gpt' in model:
             logger.info(f"Using OpenAI model: {model}")
             stream = clientOpenai.chat.completions.create(
                 model=model,
@@ -122,7 +148,7 @@ def handle_llm_stream_request(message, model):
             except Exception as e:
                 logger.error(f"Error while streaming from OpenAI: {str(e)}")
             logger.info("Finished streaming from OpenAI")
-        elif model in CLAUDE_MODELS:
+        elif 'claude' in model:
             logger.info(f"Using Claude model: {model}")
             logger.info("Entered stream_claude_response")
             response = clientAnthropic.messages.create(
@@ -156,7 +182,6 @@ def handle_llm_stream_request(message, model):
         logger.error(f"Error in handle_llm_stream_request: {str(e)}")
         yield f"data: {{\"error\": \"{str(e)}\"}}\n\n"
 
-# Routes
 @app.route('/random_models', methods=['GET'])
 def random_models():
     modelA, modelB = select_random_models()
@@ -233,6 +258,59 @@ def criticize_user_request():
         'description': description
     })
 
+@app.route('/vote', methods=['POST'])
+def vote():
+    data = request.json
+    model_a = data.get('modelA')
+    model_b = data.get('modelB')
+    result = data.get('result')  # '<model_name>' or 'draw'
+
+    if not model_a or not model_b or (result not in [model_a, model_b, 'draw']):
+        return jsonify({'error': 'Invalid input'}), 400
+
+    model_a_record = ModelScore.query.filter_by(name=model_a).first()
+    model_b_record = ModelScore.query.filter_by(name=model_b).first()
+
+    if not model_a_record or not model_b_record:
+        return jsonify({'error': 'Model not found'}), 404
+
+    update_elo_ratings(model_a_record, model_b_record, result)
+
+    db.session.commit()
+
+    return jsonify({'message': 'Vote recorded and ratings updated'})
+
+def update_elo_ratings(model_a, model_b, result):
+    K = 32  # ELO constant
+
+    def calculate_new_rating(rating, opponent_rating, actual_score):
+        expected_score = 1 / (1 + 10 ** ((opponent_rating - rating) / 400))
+        return rating + K * (actual_score - expected_score)
+
+    if result == model_a.name:
+        score_a, score_b = 1, 0
+    elif result == model_b.name:
+        score_a, score_b = 0, 1
+    elif result == 'draw':
+        score_a, score_b = 0.5, 0.5
+
+    model_a.score = calculate_new_rating(model_a.score, model_b.score, score_a)
+    model_b.score = calculate_new_rating(model_b.score, model_a.score, score_b)
+
+@app.route('/leaderboard', methods=['GET'])
+def leaderboard():
+    models = ModelScore.query.order_by(ModelScore.score.desc()).all()
+    leaderboard = [
+        {
+            'rank': idx + 1,
+            'name': model.name,
+            'score': model.score,
+            'price': model.price,
+            'price_per_score': model.price / model.score if model.score != 0 else 0
+        }
+        for idx, model in enumerate(models)
+    ]
+    return jsonify(leaderboard)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001)
