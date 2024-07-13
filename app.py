@@ -27,6 +27,7 @@ clientOpenai = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 RPC_URL = os.getenv('RPC_URL')
 PRIVATE_KEY = os.getenv('PRIVATE_KEY')
 CONTRACT_CRITIC_ADDRESS = os.getenv('CONTRACT_CRITIC_ADDRESS')
+CONTRACT_CRITIC_WALLET = os.getenv('CONTRACT_CRITIC_WALLET')
 
 if not RPC_URL or not PRIVATE_KEY or not CONTRACT_CRITIC_ADDRESS:
     raise ValueError("Missing required environment variables")
@@ -61,6 +62,8 @@ class AgentScore(db.Model):
     score = db.Column(db.Float, default=1200)
     price = db.Column(db.Float, nullable=False)
     address = db.Column(db.String(50), nullable=False)
+    wallet = db.Column(db.String(50), nullable=False)
+
 
 # Initialize models and agents from JSON if not already initialized
 def initialize_models():
@@ -77,7 +80,8 @@ def initialize_agents():
         with open('agents_data.json', 'r') as file:
             agents_data = json.load(file)
             for agent in agents_data:
-                new_agent = AgentScore(name=agent['name'], price=agent['price'], address=agent['address'])
+                new_agent = AgentScore(name=agent['name'], price=agent['price'],
+                                       address=agent['address'], wallet=agent['wallet'])
                 db.session.add(new_agent)
             db.session.commit()
 
@@ -299,8 +303,17 @@ def llm_request_streaming():
 def payUser(wallet_address):
     # Placeholder function to pay the user
     logger.info(f"Paying user with wallet address: {wallet_address}")
+    create_transfer("1", wallet_address)
+
+def payAgent(wallet_address):
+    # Placeholder function to pay the user
+    logger.info(f"Paying agent with wallet address: {wallet_address}")
+    create_transfer("1", wallet_address)
+
+def payCritic(wallet_address):
+    # Placeholder function to pay the user
+    logger.info(f"Paying critic agent with wallet address: {wallet_address}")
     create_transfer("0.1", wallet_address)
-    pass
 
 @app.route('/criticize_user_request', methods=['POST'])
 def criticize_user_request():
@@ -318,7 +331,8 @@ def criticize_user_request():
                "determine if it is good or bad, and assign it a score out of 10."
                "Additionally, provide a description explaining your score."
                "Your final output should be in JSON format with two fields: score and description."
-               "\n\nPlease provide your evaluation in the following JSON format (and ONLY in this format):\n\n{\"score\": <score out of 10>,"
+               "\n\nPlease provide your evaluation in the following JSON format (and ONLY in this format,"
+               "without ```json or ANY other info, only plain json):\n\n{\"score\": <score out of 10>,"
                "\"description\": \"<explanation of the score>\"}"
                f"\n\nHere is the user's prompt for you to evaluate:\n\n{prompt}")
 
@@ -341,6 +355,8 @@ def criticize_user_request():
 
     if wallet_address and score >= 7:
         payUser(wallet_address)
+
+    payCritic(CONTRACT_CRITIC_WALLET)
 
     return jsonify({
         'score': score,
@@ -387,9 +403,16 @@ def vote_agents():
 
     update_elo_ratings_agents(agent_a_record, agent_b_record, result)
 
+    # Pay the winning agent
+    if result == agent_a_record.name:
+        payAgent(agent_a_record.wallet)
+    elif result == agent_b_record.name:
+        payAgent(agent_b_record.wallet)
+
     db.session.commit()
 
     return jsonify({'message': 'Vote recorded and ratings updated'})
+
 
 def update_elo_ratings(model_a, model_b, result):
     K = 32  # ELO constant

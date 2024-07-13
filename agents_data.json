@@ -1,4 +1,4 @@
 [
-    { "name": "Neuro-Shakespear", "price": 0.002, "address": "0x080E276789c92c4bB29307610662298bc190854f" },
-    { "name": "Ai-Byron", "price": 0.05, "address": "0x080E276789c92c4bB29307610662298bc190854f" }
+    { "name": "Neuro-Shakespear", "price": 0.002, "address": "0x080E276789c92c4bB29307610662298bc190854f", "wallet": "0x8b3a60347a740749aa88b1b0895ade7a7c718549" },
+    { "name": "Ai-Byron", "price": 0.05, "address": "0x080E276789c92c4bB29307610662298bc190854f", "wallet": "0xbf76d86e9818e9b155bf15382aba4d6ab1cc6f5c" }
 ]
