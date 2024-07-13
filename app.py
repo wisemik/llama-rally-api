@@ -8,9 +8,18 @@ from dotenv import load_dotenv
 import os
 from flask import Flask, request, jsonify
 from eth_utils import to_dict, to_hex
+import openai
+import anthropic
 
 load_dotenv()
 
+clientAnthropic = anthropic.Anthropic(
+    api_key=os.getenv('ANTHROPIC_API_KEY')
+)
+
+clientOpenai = openai.OpenAI(
+  api_key=os.getenv('OPENAI_API_KEY')
+)
 RPC_URL = os.getenv('RPC_URL')
 PRIVATE_KEY = os.getenv('PRIVATE_KEY')
 CONTRACT_ADDRESS = os.getenv('SIMPLE_LLM_CONTRACT_ADDRESS')
@@ -67,19 +76,6 @@ def get_contract_response():
         time.sleep(2)
 
 
-# def convert_to_serializable(obj):
-#     """Recursively converts AttributeDict and HexBytes objects to serializable types."""
-#     if isinstance(obj, bytes):
-#         return obj.hex()
-#     elif isinstance(obj, list):
-#         return [convert_to_serializable(item) for item in obj]
-#     elif isinstance(obj, dict):
-#         return {key: convert_to_serializable(value) for key, value in obj.items()}
-#     elif isinstance(obj, AttributeDict):
-#         return {key: convert_to_serializable(value) for key, value in obj.items()}
-#     return obj
-
-
 @app.route('/send_message_galadriel', methods=['POST'])
 def send_message_galadriel():
     data = request.json
@@ -97,22 +93,94 @@ def send_message_galadriel():
     response = get_contract_response()
     logger.info(f"Contract response: {response}")
 
-    # Convert the receipt to a serializable format
-    # receipt_dict = convert_to_serializable(dict(receipt))
-
     return jsonify({
         'response': response
     })
 
 
-@app.route('/criticize_user_request', methods=['POST'])
-def criticize_user_request():
+
+def get_openai_completion(message):
+    completion = clientOpenai.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system",
+             "content": "You are a poetic assistant, skilled in explaining complex programming concepts with creative flair."},
+            {"role": "user", "content": message}
+        ]
+    )
+
+    return completion.choices[0].message.content
+
+
+def get_claude_completion(message):
+    response = clientAnthropic.messages.create(
+        model="claude-3-5-sonnet-20240620",
+        max_tokens=1024,
+        messages=[
+            {"role": "user", "content": "Hello, Claude"}
+        ]
+    )
+
+    # Extract the text from the first content block
+    if response.content and len(response.content) > 0:
+        response_text = response.content[0].text
+    else:
+        response_text = ""
+
+    print(response_text)
+    return response_text
+
+@app.route('/openai_response', methods=['POST'])
+def openai_response():
     data = request.json
     message = data.get('message')
     if not message:
         return jsonify({'error': 'Message is required'}), 400
 
-    logger.info(f"Received message: {message}")
+    logger.info(f"Received message for OpenAI completion: {message}")
+    openai_response = get_openai_completion(message)
+    logger.info(f"OpenAI response: {openai_response}")
+
+    return jsonify({
+        'message': message,
+        'openai_response': openai_response
+    })
+
+
+@app.route('/claude_response', methods=['POST'])
+def claude_response():
+    data = request.json
+    message = data.get('message')
+    if not message:
+        return jsonify({'error': 'Message is required'}), 400
+
+    logger.info(f"Received message for Claude completion: {message}")
+    claude_response = get_claude_completion(message)
+    logger.info(f"Claude response: {claude_response}")
+
+    return jsonify({
+        'message': message,
+        'claude_response': claude_response
+    })
+
+@app.route('/criticize_user_request', methods=['POST'])
+def criticize_user_request():
+    data = request.json
+    prompt = data.get('prompt')
+    if not prompt:
+        return jsonify({'error': 'Prompt is required'}), 400
+
+    logger.info(f"Received message: {prompt}")
+
+    message = ("You are to receive a user message that is a prompt."
+               "Your task is to evaluate this prompt,"
+               "determine if it is good or bad, and assign it a score out of 10."
+               "Additionally, provide a description explaining your score."
+               "Your final output should be in JSON format with two fields: score and description."
+               "\n\nPlease provide your evaluation in the following JSON format (and ONLY in this format):\n\n{\"score\": <score out of 10>,"
+               "\"description\": \"<explanation of the score>\"}"
+               f"\n\nHere is the user's prompt for you to evaluate:\n\n{prompt}")
+
     tx_hash = send_message_to_contract(message)
     logger.info(f"Transaction sent, tx hash: {tx_hash.hex()}")
     receipt = wait_for_transaction_receipt(tx_hash)
@@ -122,12 +190,19 @@ def criticize_user_request():
     response = get_contract_response()
     logger.info(f"Contract response: {response}")
 
-    # Convert the receipt to a serializable format
-    # receipt_dict = convert_to_serializable(dict(receipt))
+    try:
+        response_data = json.loads(response)
+        score = response_data.get('score')
+        description = response_data.get('description')
+    except (ValueError, KeyError) as e:
+        logger.error(f"Error parsing response: {e}")
+        return jsonify({'error': 'Failed to parse contract response'}), 500
 
     return jsonify({
-        'response': response
+        'score': score,
+        'description': description
     })
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001)
