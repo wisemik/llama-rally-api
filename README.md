@@ -127,3 +127,91 @@ Sends a message to the Ethereum smart contract to criticize and score a user pro
     "error": "Prompt is required"
   }
   ```
+
+### GET /random_models
+
+Selects and returns two random models from the available list.
+
+#### Request
+
+- **URL**: `/random_models`
+- **Method**: `GET`
+- **Headers**: `None`
+
+#### Response
+
+- **Success**: `200 OK`
+  ```json
+  {
+    "modelA": "gpt-3.5-turbo",
+    "modelB": "gpt-4"
+  }
+  ```
+
+### POST /llm_request
+
+Gets a completion response from the specified language model.
+
+#### Request
+
+- **URL**: `/llm_request`
+- **Method**: `POST`
+- **Headers**: `Content-Type: application/json`
+- **Body**:
+  ```json
+  {
+    "message": "Your message to the model",
+    "model": "gpt-3.5-turbo"
+  }
+  ```
+
+#### Response
+
+- **Success**: `200 OK`
+  ```json
+  {
+    "message": "Your message to the model",
+    "response": "Model's response"
+  }
+  ```
+- **Error**: `400 Bad Request` if the message or model is missing or invalid
+  ```json
+  {
+    "error": "Message is required"
+  }
+  ```
+
+### POST /llm_request_streaming
+
+Streams a completion response from the specified language model.
+
+#### Request
+
+- **URL**: `/llm_request_streaming`
+- **Method**: `POST`
+- **Headers**: `Content-Type: application/json`
+- **Body**:
+  ```json
+  {
+    "message": "Your message to the model",
+    "model": "gpt-3.5-turbo"
+  }
+  ```
+
+#### Response
+
+- **Success**: `200 OK` (Streams data)
+  ```text
+  data: {"completion": "First part of the response"}
+
+
+  data: {"completion": "Second part of the response"}
+
+
+  ```
+- **Error**: `400 Bad Request` if the message or model is missing or invalid
+  ```json
+  {
+    "error": "Message is required"
+  }
+  ```
