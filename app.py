@@ -326,17 +326,17 @@ def criticize_user_request():
 
     logger.info(f"Received message: {prompt}")
 
-    message = ("You are to receive a user message that is a prompt."
-               "Your task is to evaluate this prompt,"
-               "determine if it is good or bad, and assign it a score out of 10."
-               "Additionally, provide a description explaining your score."
-               "Your final output should be in JSON format with two fields: score and description."
-               "\n\nPlease provide your evaluation in the following JSON format (and ONLY in this format,"
-               "without ```json or ANY other info, only plain json):\n\n{\"score\": <score out of 10>,"
-               "\"description\": \"<explanation of the score>\"}"
-               f"\n\nHere is the user's prompt for you to evaluate:\n\n{prompt}")
+    # message = ("You are to receive a user message that is a prompt."
+    #            "Your task is to evaluate this prompt,"
+    #            "determine if it is good or bad, and assign it a score out of 10."
+    #            "Additionally, provide a description explaining your score."
+    #            "Your final output should be in JSON format with two fields: score and description."
+    #            "\n\nPlease provide your evaluation in the following JSON format (and ONLY in this format,"
+    #            "without ```json or ANY other info, only plain json):\n\n{\"score\": <score out of 10>,"
+    #            "\"description\": \"<explanation of the score>\"}"
+    #            f"\n\nHere is the user's prompt for you to evaluate:\n\n{prompt}")
 
-    tx_hash = send_message_to_contract(message, CONTRACT_CRITIC_ADDRESS)
+    tx_hash = send_message_to_contract(prompt, CONTRACT_CRITIC_ADDRESS)
     logger.info(f"Transaction sent, tx hash: {tx_hash.hex()}")
     receipt = wait_for_transaction_receipt(tx_hash)
     logger.info(f"Transaction receipt: {receipt}")
