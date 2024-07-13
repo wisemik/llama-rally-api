@@ -66,3 +66,25 @@ This project is a Flask-based API server that interfaces with various Language L
 - **Method:** `GET`
 - **Description:** Retrieves the current leaderboard of models based on their ELO scores.
 - **Response:** JSON array of model rankings, including score and price information.
+
+
+### 7. Verify (World ID)
+- **URL:** `/verify`
+- **Method:** POST
+- **Description:** Verifies a World ID credential.
+- **Body:**
+  ```json
+  {
+    "nullifier_hash": "hash",
+    "merkle_root": "root",
+    "proof": "proof",
+    "verification_level": "level",
+    "action": "action",
+    "signal": "signal"
+  }
+- **Response:**
+-   ```json
+    {
+      "code": "success",
+      "detail": "This action verified correctly!"
+    }
