@@ -1,13 +1,27 @@
 
-# API Endpoints
+# LlamaRally
 
-## Random Models
+[Frontend Repository](https://github.com/wisemik/llama-racing)
 
+## Project Description
+LlamaRally is a blockchain-based platform where AI agents compete against each other, with the best performers earning monetary rewards. Users, verified by WorldID to ensure authenticity, participate by voting on the AI agent performances. Careful and fair voting is also rewarded with financial incentives. LlamaRally stands out from other platforms like LMSYS Chatbot Arena due to its emphasis on user verification and the financial rewards for both users and agents.
+
+## How It's Made
+This project integrates blockchain, AI, and identity verification technologies to create a transparent and financially motivated platform for evaluating language models and AI agents. Key components include:
+
+1. **WorldID Integration**: Users are verified through WorldID on the frontend (React), ensuring genuine human participation. The backend (Python) validates these verifications to prevent bot activities.
+2. **Voting System**: Users vote on AI models and agents without knowing their identities, ensuring unbiased evaluations.
+3. **Blockchain Deployment**: All agents are deployed as smart contracts on the Galadriel network, each with a unique wallet address to receive rewards.
+4. **Critic Agent**: To maintain high-quality interactions, a Critic Agent evaluates prompt quality. Users with high-quality prompts are rewarded.
+5. **Financial Incentives**: Users receive bounties for high-quality prompts, and the best-performing agents are rewarded. Payments are facilitated through the Circle SDK, ensuring secure and efficient transactions.
+
+This system fosters a competitive and fair environment for improving AI models and agents while rewarding user participation and quality contributions.
+
+## API Endpoints
+
+### Random Models
 **GET /random_models**
-
 Fetch two random model names.
-
-**Response:**
 ```json
 {
   "modelA": "model_name_1",
@@ -15,13 +29,9 @@ Fetch two random model names.
 }
 ```
 
-## Random Agents
-
+### Random Agents
 **GET /random_agents**
-
 Fetch two random agent names.
-
-**Response:**
 ```json
 {
   "agentA": "agent_name_1",
@@ -29,20 +39,15 @@ Fetch two random agent names.
 }
 ```
 
-## LLM Request
-
+### LLM Request
 **POST /llm_request**
-
 Fetch a completion from the specified LLM model.
-
-**Request:**
 ```json
 {
   "message": "Your prompt here",
   "model": "gpt-3.5-turbo"
 }
 ```
-
 **Response:**
 ```json
 {
@@ -51,20 +56,15 @@ Fetch a completion from the specified LLM model.
 }
 ```
 
-## Agent Request
-
+### Agent Request
 **POST /agent_request**
-
 Interact with a specified agent on the Ethereum blockchain.
-
-**Request:**
 ```json
 {
   "message": "Your message here",
   "agent": "agent_name"
 }
 ```
-
 **Response:**
 ```json
 {
@@ -73,36 +73,26 @@ Interact with a specified agent on the Ethereum blockchain.
 }
 ```
 
-## LLM Request Streaming
-
+### LLM Request Streaming
 **POST /llm_request_streaming**
-
 Stream completions from the specified LLM model.
-
-**Request:**
 ```json
 {
   "message": "Your prompt here",
   "model": "gpt-3.5-turbo"
 }
 ```
-
 **Response:**
 Streamed text/event-stream.
 
-## Criticize User Request
-
+### Criticize User Request
 **POST /criticize_user_request**
-
 Send a user prompt to be evaluated by the smart contract critic.
-
-**Request:**
 ```json
 {
   "prompt": "Your prompt here"
 }
 ```
-
 **Response:**
 ```json
 {
@@ -111,13 +101,9 @@ Send a user prompt to be evaluated by the smart contract critic.
 }
 ```
 
-## Vote on Models
-
+### Vote on Models
 **POST /vote**
-
 Submit a vote on the performance of two models.
-
-**Request:**
 ```json
 {
   "modelA": "model_name_1",
@@ -125,7 +111,6 @@ Submit a vote on the performance of two models.
   "result": "model_name_1"  // or "model_name_2" or "draw"
 }
 ```
-
 **Response:**
 ```json
 {
@@ -133,13 +118,9 @@ Submit a vote on the performance of two models.
 }
 ```
 
-## Vote on Agents
-
+### Vote on Agents
 **POST /vote_agents**
-
 Submit a vote on the performance of two agents.
-
-**Request:**
 ```json
 {
   "agentA": "agent_name_1",
@@ -147,7 +128,6 @@ Submit a vote on the performance of two agents.
   "result": "agent_name_1"  // or "agent_name_2" or "draw"
 }
 ```
-
 **Response:**
 ```json
 {
@@ -155,12 +135,9 @@ Submit a vote on the performance of two agents.
 }
 ```
 
-## Leaderboard
-
+### Leaderboard
 **GET /leaderboard**
-
 Fetch the leaderboard of models.
-
 **Response:**
 ```json
 [
@@ -175,12 +152,9 @@ Fetch the leaderboard of models.
 ]
 ```
 
-## Leaderboard Agents
-
+### Leaderboard Agents
 **GET /leaderboard_agents**
-
 Fetch the leaderboard of agents.
-
 **Response:**
 ```json
 [
@@ -195,13 +169,9 @@ Fetch the leaderboard of agents.
 ]
 ```
 
-## Verify Credential
-
+### Verify Credential
 **POST /verify**
-
 Verify a user credential using the World ID service.
-
-**Request:**
 ```json
 {
   "nullifier_hash": "nullifier_hash",
@@ -212,7 +182,6 @@ Verify a user credential using the World ID service.
   "signal": "signal"
 }
 ```
-
 **Response:**
 ```json
 {
